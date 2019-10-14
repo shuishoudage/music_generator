@@ -17,3 +17,9 @@ For generating cleaned data, type following code on terminal
 ```bash
 python3 preprocessing.py ~/path_of_your_midi_files
 ```
+
+processed data will be stored with name piano_roll.npy file, in order to
+load this data, type following code in python to load it back to numpy array
+```python
+arr = np.load('piano_roll.npy')
+```
