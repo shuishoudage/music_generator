@@ -95,7 +95,7 @@ class Preprocess(object):
         ]
         return min(notes), max(notes)
 
-    def piano_roll_filter(self) -> np.array:
+    def piano_roll_convertor(self) -> np.array:
         """
         according generated meta data info to filter out those not in range
         """
@@ -163,8 +163,8 @@ class Preprocess(object):
 if __name__ == "__main__":
     try:
         p = Preprocess(argv)
-        result = p.piano_roll_filter()
-        print(result.shape)
+        result = p.piano_roll_convertor()
+        np.save("piano_roll.npy", result, allow_pickle=False)
     except Exception as err:
         logging.error(traceback.format_exc())
         exit(1)
