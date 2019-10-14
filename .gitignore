@@ -105,3 +105,6 @@ venv.bak/
 
 # ignore .vscode
 .vscode
+
+# ignore generated data
+*.npy
