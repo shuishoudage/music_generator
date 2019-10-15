@@ -15,6 +15,7 @@ The code above will create a same environment as this project.
 
 For generating cleaned data, type following code on terminal
 ```bash
+source activate music
 python3 preprocessing.py ~/path_of_your_midi_files
 ```
 
