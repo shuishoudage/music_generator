@@ -47,7 +47,7 @@ class FileReport(object):
         """
         temp_mean = np.array(self.tempos).mean()
         temp_std = np.array(self.tempos).std()
-        most_freq_key = self.get_most_freq_value(self.freq_key)
+        most_freq_key = self.getMostFreqValue(self.freq_key)
         min_pitch = int(np.array(self.min_pitch).mean())
         max_pitch = int(np.array(self.max_pitch).mean())
         return temp_mean, temp_std, most_freq_key, min_pitch, max_pitch
@@ -56,17 +56,17 @@ class FileReport(object):
         # implement later on
         pass
 
-    def get_most_freq_value(self, keys: Dict[int, int], reversed=True) -> int:
+    def getMostFreqValue(self, keys: Dict[int, int], reversed=True) -> int:
         return sorted(keys.items(), key=lambda kv: kv[1], reverse=reversed)[0][0]
 
 
 class Preprocess(object):
     def __init__(self, argv: List[str]):
         self.argv = argv
-        self._cli_arg_parser()
-        self._file_filter()
+        self.cliArgParser()
+        self.fileFilter()
 
-    def generate_midi_files_report(self) -> FileReport:
+    def generateMidiFileReport(self) -> FileReport:
         """
         meta information like tempos, keys, pitches will be generated for
         filtering the midi files
@@ -79,14 +79,14 @@ class Preprocess(object):
             tempos.append(pm.estimate_tempo())
             key = pm.key_signature_changes[0].key_number
             keys.append(key)
-            min_pitch, max_pitch = self._get_min_max_pitch(pm)
+            min_pitch, max_pitch = self.getMinMaxPitch(pm)
             max_pitchs.append(max_pitch)
             min_pitchs.append(min_pitch)
         self.report = FileReport(tempos, dict(
             Counter(keys)), min_pitchs, max_pitchs)
         return self.report
 
-    def _get_min_max_pitch(self, pm: pretty_midi.PrettyMIDI):
+    def getMinMaxPitch(self, pm: pretty_midi.PrettyMIDI):
         """
         find the min and max pitch inside a midi file
         """
@@ -95,29 +95,26 @@ class Preprocess(object):
         ]
         return min(notes), max(notes)
 
-    def piano_roll_convertor(self) -> np.array:
+    def pianoRollGenerator(self) -> np.array:
         """
         according generated meta data info to filter out those not in range
         """
-        report = self.generate_midi_files_report()
+        report = self.generateMidiFileReport()
         temp_mean, temp_std, key, left_pitch_bounary, right_pitch_boundary = report.aggregation_report()
         piano_rolls = []
         for pm in self.pms:
             tempo = pm.estimate_tempo()
-            min_pitch, max_pitch = self._get_min_max_pitch(pm)
-            if self._is_in_tempo_range(tempo,
-                                       temp_mean,
-                                       temp_std) and self._is_in_pitch_range(min_pitch,
-                                                                             max_pitch,
-                                                                             left_pitch_bounary,
-                                                                             right_pitch_boundary):
+            min_pitch, max_pitch = self.getMinMaxPitch(pm)
+            if self.isTempoInRange(tempo, temp_mean, temp_std) \
+                and self.isPitchInRange(min_pitch, max_pitch, left_pitch_bounary, right_pitch_boundary) \
+                    and self.isKeyMatch(pm.key_signature_changes[0].key_number, key):
                 piano_roll = pm.get_piano_roll(
                 )[left_pitch_bounary: right_pitch_boundary+1]
                 piano_rolls.append(piano_roll)
         result = np.hstack(piano_rolls)
         return result.T
 
-    def _is_in_tempo_range(self, tempo: float, mean: float, std: float) -> bool:
+    def isTempoInRange(self, tempo: float, mean: float, std: float) -> bool:
         """
         a helper function that can be used check if a midi file's tempo in range
         """
@@ -125,15 +122,20 @@ class Preprocess(object):
             return True
         return False
 
-    def _is_in_pitch_range(self, low_pitch: int,
-                           high_pitch: int,
-                           left_boundary: int,
-                           right_boundary: int) -> bool:
+    def isKeyMatch(self, key: int, grand_truth_key: int) -> bool:
+        if key == grand_truth_key:
+            return True
+        return False
+
+    def isPitchInRange(self, low_pitch: int,
+                       high_pitch: int,
+                       left_boundary: int,
+                       right_boundary: int) -> bool:
         if low_pitch >= left_boundary and high_pitch <= right_boundary:
             return True
         return False
 
-    def _file_filter(self):
+    def fileFilter(self):
         """
         first filtering that only allow one tempo and one key inside a midi file
         """
@@ -150,7 +152,7 @@ class Preprocess(object):
                 except:  # skip all parsing exceptions
                     pass
 
-    def _cli_arg_parser(self):
+    def cliArgParser(self):
         if len(self.argv) != 2:
             raise ValueError(f"path of folder must be provided")
         if isdir(self.argv[1]):
@@ -163,7 +165,8 @@ class Preprocess(object):
 if __name__ == "__main__":
     try:
         p = Preprocess(argv)
-        result = p.piano_roll_convertor()
+        result = p.pianoRollGenerator()
+        print(result.shape)
         np.save("piano_roll.npy", result, allow_pickle=False)
     except Exception as err:
         logging.error(traceback.format_exc())
