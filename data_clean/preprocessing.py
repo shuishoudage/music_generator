@@ -169,5 +169,5 @@ if __name__ == "__main__":
         print(result.shape)
         np.save("piano_roll.npy", result, allow_pickle=False)
     except Exception as err:
-        logging.error(traceback.format_exc())
+        print(traceback.format_exc())
         exit(1)
