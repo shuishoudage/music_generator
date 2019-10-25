@@ -1,4 +1,4 @@
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Any
 from collections import Counter
 import pretty_midi
 import matplotlib.pyplot as plt
@@ -10,6 +10,8 @@ from sys import argv
 import traceback
 import logging
 import numpy as np
+from shutil import copyfile
+import shutil
 
 
 # Ideas behind the preprocessing class
@@ -61,9 +63,8 @@ class FileReport(object):
 
 
 class Preprocess(object):
-    def __init__(self, argv: List[str]):
-        self.argv = argv
-        self.cliArgParser()
+    def __init__(self, path: str):
+        self.path = path
         self.fileFilter()
 
     def generateMidiFileReport(self) -> FileReport:
@@ -76,12 +77,15 @@ class Preprocess(object):
         max_pitchs = []
         min_pitchs = []
         for pm in self.pms:
-            tempos.append(pm.estimate_tempo())
-            key = pm.key_signature_changes[0].key_number
-            keys.append(key)
-            min_pitch, max_pitch = self.getMinMaxPitch(pm)
-            max_pitchs.append(max_pitch)
-            min_pitchs.append(min_pitch)
+            try:
+                tempos.append(pm.estimate_tempo())
+                key = pm.key_signature_changes[0].key_number
+                keys.append(key)
+                min_pitch, max_pitch = self.getMinMaxPitch(pm)
+                max_pitchs.append(max_pitch)
+                min_pitchs.append(min_pitch)
+            except:
+                pass
         self.report = FileReport(tempos, dict(
             Counter(keys)), min_pitchs, max_pitchs)
         return self.report
@@ -95,24 +99,27 @@ class Preprocess(object):
         ]
         return min(notes), max(notes)
 
-    def pianoRollGenerator(self) -> np.array:
+    def SaveFilterMIDIfiles(self):
         """
         according generated meta data info to filter out those not in range
         """
         report = self.generateMidiFileReport()
-        temp_mean, temp_std, key, left_pitch_bounary, right_pitch_boundary = report.aggregation_report()
-        piano_rolls = []
-        for pm in self.pms:
-            tempo = pm.estimate_tempo()
-            min_pitch, max_pitch = self.getMinMaxPitch(pm)
-            if self.isTempoInRange(tempo, temp_mean, temp_std) \
-                and self.isPitchInRange(min_pitch, max_pitch, left_pitch_bounary, right_pitch_boundary) \
-                    and self.isKeyMatch(pm.key_signature_changes[0].key_number, key):
-                piano_roll = pm.get_piano_roll(
-                )[left_pitch_bounary: right_pitch_boundary+1]
-                piano_rolls.append(piano_roll)
-        result = np.hstack(piano_rolls)
-        return result.T
+        temp_mean, temp_std, key, left_boundary, right_boundary = report.aggregation_report()
+        piano_roll_paths = []
+        for pm, path in zip(self.pms, self.paths):
+            try:
+                tempo = pm.estimate_tempo()
+                min_pitch, max_pitch = self.getMinMaxPitch(pm)
+                if self.isTempoInRange(tempo, temp_mean, temp_std) \
+                    and self.isPitchInRange(min_pitch, max_pitch, left_boundary, right_boundary) \
+                        and self.isKeyMatch(pm.key_signature_changes[0].key_number, key):
+                    savedPath = os.path.join(os.getcwd(), 'filterData')
+                    if not os.path.exists(savedPath):
+                        os.makedirs(savedPath, exist_ok=True)
+                    shutil.move(
+                        path, os.path.join(os.getcwd(), 'filterData', os.path.basename(path)))
+            except:
+                pass
 
     def isTempoInRange(self, tempo: float, mean: float, std: float) -> bool:
         """
@@ -140,6 +147,7 @@ class Preprocess(object):
         first filtering that only allow one tempo and one key inside a midi file
         """
         self.pms: List[pretty_midi.PrettyMIDI] = []
+        self.paths: List[str] = []
         for (dirPath, _, files) in walk(self.path):  # type: ignore
             for file in files:
                 # get the absoluted path of file
@@ -147,27 +155,29 @@ class Preprocess(object):
                 try:
                     pm = pretty_midi.PrettyMIDI(path)
                     # only handle files contain one key and one tempo
-                    if len(pm.key_signature_changes) == 1 and len(pm.time_signature_changes) == 1:
+                    if len(pm.key_signature_changes) == 1 \
+                            and len(pm.time_signature_changes) == 1:
                         self.pms.append(pm)
+                        self.paths.append(path)
                 except:  # skip all parsing exceptions
                     pass
 
-    def cliArgParser(self):
-        if len(self.argv) != 2:
-            raise ValueError(f"path of folder must be provided")
-        if isdir(self.argv[1]):
-            path = os.path.abspath(argv[1])
-            self.path = path
-        else:
-            raise ValueError(f"provided path is not a folder")
+
+def cliArgParser(argv) -> Any:
+    if len(argv) != 2:
+        raise ValueError(f"path of folder must be provided")
+    if isdir(argv[1]):
+        path = os.path.abspath(argv[1])
+        return path
+    else:
+        raise ValueError(f"provided path is not a folder")
 
 
 if __name__ == "__main__":
     try:
-        p = Preprocess(argv)
-        result = p.pianoRollGenerator()
-        print(result.shape)
-        np.save("piano_roll.npy", result, allow_pickle=False)
+        path = cliArgParser(argv)
+        p = Preprocess(path)
+        p.SaveFilterMIDIfiles()
     except Exception as err:
         print(traceback.format_exc())
         exit(1)
